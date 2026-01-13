@@ -1,7 +1,7 @@
 import torch
 import sys
 from src import config
-from src.data import SplitMNIST
+from src.data import SplitCIFAR10
 from src.trainer import Trainer
 from src.logger import ExperimentLogger
 
@@ -24,7 +24,7 @@ def main():
     print(f"Device: {device}")
 
     logger = ExperimentLogger(cfg.log_dir, cfg.experiment_name)
-    dataset = SplitMNIST(root="./data", batch_size=cfg.training.batch_size)
+    dataset = SplitCIFAR10(root="./data", batch_size=cfg.training.batch_size)
     trainer = Trainer(cfg, device)
 
     # Task Schedule: Split MNIST into 5 tasks of 2 classes each
