@@ -1,0 +1,16 @@
+experiment_name: "ewc_split_mnist"
+log_dir: "./logs"
+seed: 42
+device: "cuda"
+debug: false
+
+training:
+  batch_size: 64
+  lr: 0.001
+  epochs_per_task: 5
+  input_dim: 3072
+  hidden_dim: 400
+
+ewc:
+  lambda_val: 1000
+  num_samples: 1000
