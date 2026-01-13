@@ -25,6 +25,9 @@ class EWC:
         computed_samples = 0
         self.model.zero_grad()
 
+        if self.num_samples == 0:
+            return fisher
+
         for imgs, labels in self.dataloader:
             imgs = imgs.to(self.device)
 
