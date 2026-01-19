@@ -128,7 +128,7 @@ class REMINDStrategy(BaseStrategy):
         super().__init__(model, device, lr)
 
         # dummy feature size initialization
-        dummy_input = torch.randn(1, 3, 32, 32).to(device)
+        dummy_input = torch.randn(2, 3, 32, 32).to(device)
         with torch.no_grad():
             dummy_feat = model.forward_G(dummy_input)
 
