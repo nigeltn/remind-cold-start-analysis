@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.nn.functional as F
 
-from src.buffer import RemindBuffer
+from src.buffer import REMINDBufer
 
 
 class BaseStrategy:
@@ -35,65 +36,83 @@ class BaseStrategy:
 
 
 class EWCStrategy(BaseStrategy):
-    def __init__(self, model, device, ewc_lambda=2000):
+    def __init__(self, model, device, ewc_lambda=5000, fisher_sample_size=1024):
         super().__init__(model, device)
         self.ewc_lambda = ewc_lambda
         self.fisher = {}
         self.opt_params = {}
+        self.fisher_sample_size = fisher_sample_size
 
     def _compute_loss(self, imgs, labels, task_id):
+        unique_classes = torch.unique(labels).sort()[0]
+
         logits = self.model(imgs)
-        loss = self.criterion(logits, labels)
+
+        masked_logits = logits[:, unique_classes]
+
+        mapped_labels = torch.searchsorted(unique_classes, labels)
+
+        loss_main = self.criterion(masked_logits, mapped_labels)
+
+        loss_ewc = torch.tensor(0.0).to(self.device)
 
         if self.fisher:
-            ewc_loss = 0
+            ewc_sum = 0
             for name, param in self.model.named_parameters():
                 if name in self.fisher:
-                    # fisher * (current - old)^2
-                    ewc_loss += (
-                        self.fisher[name] * (param - self.opt_params[name]).pow(2)
-                    ).sum()
-            loss += (self.ewc_lambda / 2) * ewc_loss
+                    fisher_val = self.fisher[name]
+                    theta_diff = (param - self.opt_params[name]).pow(2)
+                    ewc_sum += (fisher_val * theta_diff).sum()
 
-        return loss
+            loss_ewc = (self.ewc_lambda / 2) * ewc_sum
+
+        return loss_main + loss_ewc
 
     def on_task_complete(self, dataloader, task_id):
-        print(f"[EWC] Computing Fisher Matrix for Task {task_id}...")
+        print(f"\n[EWC] Computing Fisher Matrix for Task {task_id}...")
         self.model.eval()
-
+        self.opt_params = {
+            n: p.detach().clone()
+            for n, p in self.model.named_parameters()
+            if p.requires_grad
+        }
         curr_fisher = {
             n: torch.zeros_like(p)
             for n, p in self.model.named_parameters()
             if p.requires_grad
         }
 
-        self.opt_params = {
-            n: p.detach().clone()
-            for n, p in self.model.named_parameters()
-            if p.requires_grad
-        }
+        all_labels = []
+        for _, y in dataloader:
+            all_labels.append(y)
+            if len(all_labels) * dataloader.batch_size > 2000:
+                break
+        unique_classes = torch.unique(torch.cat(all_labels)).sort()[0].to(self.device)
 
+        computed_samples = 0
         for imgs, labels in dataloader:
             imgs, labels = imgs.to(self.device), labels.to(self.device)
+            if computed_samples >= self.fisher_sample_size:
+                break
+
             self.model.zero_grad()
             logits = self.model(imgs)
-            loss = self.criterion(logits, labels)
+            masked_logits = logits[:, unique_classes]
+            mapped_labels = torch.searchsorted(unique_classes, labels)
+            loss = F.cross_entropy(masked_logits, mapped_labels)
             loss.backward()
 
             for n, p in self.model.named_parameters():
                 if p.grad is not None:
                     curr_fisher[n] += p.grad.detach().pow(2)
+            computed_samples += imgs.size(0)
 
-        num_samples = len(dataloader.dataset)
         for n in curr_fisher:
-            curr_fisher[n] /= num_samples
-
             if n in self.fisher:
                 self.fisher[n] += curr_fisher[n]
             else:
                 self.fisher[n] = curr_fisher[n]
-
-        print("✅ Fisher Matrix Updated.")
+        print(f"[EWC] Fisher Matrix Updated.")
 
 
 class REMINDStrategy(BaseStrategy):
@@ -116,7 +135,7 @@ class REMINDStrategy(BaseStrategy):
         self.feat_shape = dummy_feat.shape[1:]
         self.feature_dim = dummy_feat.numel() // dummy_feat.shape[0]
 
-        self.buffer = RemindBuffer(
+        self.buffer = REMINDBufer(
             buffer_size=buffer_size,
             feature_dim=self.feature_dim,
             pq_subspaces=pq_subspaces,

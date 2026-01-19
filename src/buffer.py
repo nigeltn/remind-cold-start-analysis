@@ -3,7 +3,7 @@ import numpy as np
 import faiss
 
 
-class RemindBuffer:
+class REMINDBufer:
     def __init__(
         self, buffer_size, feature_dim, pq_subspaces=32, pq_centroids=256, device="cpu"
     ):
