@@ -1,4 +1,3 @@
-# src/args.py
 import argparse
 import torch
 
@@ -26,11 +25,15 @@ def get_parser():
         "--log_dir", type=str, default="./logs", help="Where to save JSON logs"
     )
 
-    # NEW: Debug Flag
+    # Debug Flag
     parser.add_argument(
         "--debug",
         action="store_true",
         help="Run in debug mode (fewer samples, 1 epoch, CPU friendly)",
+    )
+
+    parser.add_argument(
+        "--pretrained", action="store_true", help="Use ImageNet pre-trained backbone"
     )
 
     # --- Optimization / Training ---

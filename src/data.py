@@ -4,24 +4,40 @@ from torch.utils.data import DataLoader, Subset
 
 
 class SplitCIFAR10:
-    def __init__(self, root="./data", batch_size=64, debug=False):
-        img_transformation = transforms.Compose(
-            [
-                transforms.ToTensor(),
-                transforms.Normalize(
-                    (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
-                ),
-            ]
-        )
-
-        self.train_data = datasets.CIFAR10(
-            root=root, train=True, transform=img_transformation, download=True
-        )
-        self.test_data = datasets.CIFAR10(
-            root=root, train=False, transform=img_transformation, download=True
-        )
+    def __init__(self, root="./data", batch_size=64, pretrained=False, debug=False):
         self.batch_size = batch_size
         self.debug = debug
+
+        if pretrained:
+            print(f"[Data] Mode: PRE-TRAINED (Resize 224x224 | ImageNet Stats)")
+            self.transform = transforms.Compose(
+                [
+                    transforms.Resize((224, 224)),
+                    transforms.ToTensor(),
+                    transforms.Normalize(
+                        mean=[0.485, 0.456, 0.406],  # ImageNet Mean
+                        std=[0.229, 0.224, 0.225],  # ImageNet Std
+                    ),
+                ]
+            )
+        else:
+            print(f"[Data] Mode: SCRATCH (Original 32x32 | CIFAR-10 Stats)")
+            self.transform = transforms.Compose(
+                [
+                    transforms.ToTensor(),
+                    transforms.Normalize(
+                        mean=[0.4914, 0.4822, 0.4465],  # CIFAR-10 Mean
+                        std=[0.2023, 0.1994, 0.2010],  # CIFAR-10 Std
+                    ),
+                ]
+            )
+
+        self.train_data = datasets.CIFAR10(
+            root=root, train=True, transform=self.transform, download=True
+        )
+        self.test_data = datasets.CIFAR10(
+            root=root, train=False, transform=self.transform, download=True
+        )
 
     def get_task_loader(self, task_labels):
         return (
@@ -43,7 +59,7 @@ class SplitCIFAR10:
         indices = mask.nonzero(as_tuple=True)[0]
 
         if debug:
-            limit = min(len(indices), 128)
+            limit = min(len(indices), 256)
             indices = indices[:limit]
 
         return DataLoader(
